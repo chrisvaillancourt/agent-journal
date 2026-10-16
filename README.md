@@ -86,6 +86,13 @@ The frontmatter lists every session judged, so rerunning catch-up skips them. Se
 - `whoami` prints the current session's key. Claude Code exposes its id; in omp, pass a token you printed in an earlier command with `--nonce`.
 - `config-path` prints where the config is read from.
 
+## Limits
+
+- Catch-up reads Claude Code and omp transcripts only. Sessions in other harnesses, Codex included, can still be journaled from inside the session.
+- Weeks run Monday through Sunday.
+- The lists of editing and shell tool names, and of housekeeping slash commands, match current Claude Code and omp; a harness release that renames them needs a script update.
+- No automatic capture: nothing runs unless you ask (see decision 1 in [docs/decisions.md](docs/decisions.md)).
+
 ## Development
 
 ```sh
