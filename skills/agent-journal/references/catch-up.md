@@ -29,7 +29,7 @@ This is a quick judgment on short digests, so use a small, fast model when your 
 
 For each **entry** session, find the outcome, decisions and lessons. The digest's prompts and last reply are a start, not enough. In order of preference:
 
-1. `funes sketch <funes_id>` (or the funes MCP `sketch` tool) for a digest of the whole session, then `funes get` for the stretches that matter. For a session that spans days, pass `--from`/`--to` seqs to stay within the day.
+1. `funes sketch <funes_id>` (or the funes MCP `sketch` tool) for a digest of the whole session, then `funes get` for the stretches that matter. For a session that spans days, keep to the day by the timestamps: every `sketch` hit and `get` turn prints its timestamp beside its seq, so use hits that fall on the day, and pass `get` the seqs of hits on either side of the day's boundaries as `--from`/`--to`. `candidates` gives the day's `first_ts`/`last_ts`, not seqs.
 2. Without funes, read the transcript with `jq`, filtering to the day's timestamps.
 3. `git log` in the session's repository for commit subjects, and the pull request or ticket for numbers and links.
 

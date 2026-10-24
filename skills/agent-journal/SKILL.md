@@ -74,8 +74,9 @@ Rules for entries:
 
 1. Find this session's key: run `journal.py whoami`. If it reports the session wasn't found, make up a fresh token such as `aj-` followed by eight random characters, print it with `echo <token>`, then run `journal.py whoami --nonce <token>` as a separate command.
 2. Get today's note path with `journal.py paths` (it defaults to today's local date).
-3. If the key is already in that note's `sessions`, update its entry. Otherwise write a new one from what you know of this session. Check facts you'll cite (commit subjects, pull request numbers, ticket keys) with `git log` or the system that holds them, rather than from memory.
-4. Add the key to `sessions`.
+3. If the session was compacted or resumed, its early turns survive only as a summary that drops ids, errors, commands and decisions. Read them back first: with a session-search tool such as funes, `sketch` this session (`whoami` prints its `funes_id`), then `get` or `scan` the stretches you need; otherwise read the transcript file `whoami` names.
+4. If the key is already in that note's `sessions`, update its entry. Otherwise write a new one from what you know of this session. Check facts you'll cite (commit subjects, pull request numbers, ticket keys) with `git log` or the system that holds them, rather than from memory.
+5. Add the key to `sessions`.
 
 Done when the entry is written and the key is in the frontmatter.
 

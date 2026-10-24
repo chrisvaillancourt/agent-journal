@@ -14,6 +14,7 @@ Each entry records what was decided, why, the alternatives, and when to revisit 
 8. [Finding the current session](#8-finding-the-current-session)
 9. [Out-of-scope sessions leave no detail](#9-out-of-scope-sessions-leave-no-detail)
 10. [Note paths come from the script](#10-note-paths-come-from-the-script)
+11. [Read compacted turns back; link open items kept elsewhere](#11-read-compacted-turns-back-link-open-items-kept-elsewhere)
 
 ## 1. Manual and on-demand only
 
@@ -94,3 +95,13 @@ Each entry records what was decided, why, the alternatives, and when to revisit 
 **Decision:** The config sets the journal folder and, through `day_note` and `week_note` patterns, each note's filename and subfolder. The skill gets every note path from `journal.py paths` and never builds one itself. Tool-specific signals, such as a ticket tracker's CLI, go in the config's `notable_commands`, not the code.
 
 **Why:** Other users organize notes differently (nested by year, ISO week names), and the script needs the same path to read a day note's frontmatter. One function computing paths keeps the skill and the script from disagreeing.
+
+## 11. Read compacted turns back; link open items kept elsewhere
+
+**Decision:** "Journal this session" reads the session's early turns back (funes `sketch`, then `get` or `scan`, or the transcript file) when the session was compacted or resumed, before writing. Catch-up keeps a multi-day session to the day by the timestamps funes prints beside each seq, not by seqs from `candidates`, which emits only timestamps. The week note's open threads link the latest dated record of open items the user already keeps (a daily catch-up or status note) and list only threads it doesn't hold.
+
+**Why:** An audit of real use (2026-10-24) found three gaps. Writing "from what you know of this session" after a compaction works from a summary that drops ids, errors and commands. Catch-up told the agent to pass seqs it had no way to get. The week note recomputed open items that a daily catch-up note already held, so the two could disagree.
+
+**Alternatives:** have `journal.py` emit funes seqs (it would have to assume funes numbers turns in transcript record order, which isn't documented).
+
+**Revisit when:** funes accepts timestamps for `get`, or the week note's open threads stop matching the linked record.

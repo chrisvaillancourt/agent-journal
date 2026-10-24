@@ -39,6 +39,6 @@ Days: Mon 2026-10-12, Tue 2026-10-13, Wed 2026-10-14, Thu 2026-10-15, Fri 2026-1
 - **Wins:** every `#win` entry, rewritten for a performance review: the outcome, its impact, and a link to the evidence (pull request, ticket, doc). Add any outcome that clearly qualifies but wasn't marked, and say so.
 - **By project:** for each project, 1 to 4 bullets summarizing the week's work, with links. Summarize; don't repeat the day entries.
 - **Lessons:** the week's lessons, merged and deduplicated. Mark any that are worth promoting to the user's lasting memory or a repository's docs, and leave the promotion to the user.
-- **Open threads:** Open items from the week that still apply, each with a disposition. Check items you can verify (a pull request merged, a ticket closed) and drop the finished ones.
+- **Open threads:** when the user keeps another dated record of open items (a daily catch-up or status note, say), link the latest one's open items instead of recomputing them, and list only the week's open threads it doesn't hold. Otherwise list the open items from the week that still apply. Give each listed item a disposition; check items you can verify (a pull request merged, a ticket closed) and drop the finished ones.
 
 Done when the week note exists, every day with activity has a day note, and every win links its evidence.
