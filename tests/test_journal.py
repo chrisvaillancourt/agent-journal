@@ -143,6 +143,39 @@ def test_day_boundaries_use_the_given_timezone(roots):
     assert "claude:late" not in by_key(journal.scan(DAY, config(roots), tz=UTC))
 
 
+@pytest.fixture
+def eastern_local_time(monkeypatch):
+    import time
+
+    monkeypatch.setenv("TZ", "America/New_York")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def test_default_timezone_applies_each_days_own_dst_offset(roots, eastern_local_time):
+    _, claude, _, _ = roots
+    # 04:30 UTC is 23:30 the day before in January (EST) but 00:30 the same day in July (EDT).
+    # A fixed offset taken from today's clock gets one of the two wrong, whatever the season.
+    write_jsonl(claude / "-work-repo/jan.jsonl", [claude_user("2026-01-15T04:30:00Z", "winter")])
+    write_jsonl(claude / "-work-repo/jul.jsonl", [claude_user("2026-07-15T04:30:00Z", "summer")])
+    assert "claude:jan" not in by_key(journal.scan(date(2026, 1, 15), config(roots)))
+    assert "claude:jul" in by_key(journal.scan(date(2026, 7, 15), config(roots)))
+
+
+def test_a_posix_tz_rule_that_names_no_zone_falls_back_to_the_local_offset(monkeypatch):
+    import time
+
+    monkeypatch.setenv("TZ", "EST5EDT,M3.2.0,M11.1.0")
+    time.tzset()
+    try:
+        assert journal.local_zone().utcoffset(None) is not None
+    finally:
+        monkeypatch.undo()
+        time.tzset()
+
+
 def test_subagent_transcripts_and_sidechain_records_are_ignored(roots):
     _, claude, _, _ = roots
     write_jsonl(claude / "-work-repo/main/subagents/agent-x.jsonl", [claude_user("2026-10-15T10:00:00Z", "sub")])

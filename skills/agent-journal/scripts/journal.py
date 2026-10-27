@@ -34,7 +34,7 @@ import tomllib
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, tzinfo
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 PROMPT_CHARS = 300
 REPLY_CHARS = 600
@@ -331,6 +331,24 @@ def _claude_prompt_text(record: dict) -> str | None:
     return text
 
 
+def local_zone() -> tzinfo:
+    """The local IANA zone, so each past day gets its own DST offset.
+
+    Falls back to today's fixed offset only when the zone can't be named.
+    """
+    name = os.environ.get("TZ", "").lstrip(":")
+    if not name:
+        link = os.path.realpath("/etc/localtime")
+        if "/zoneinfo/" in link:
+            name = link.split("/zoneinfo/", 1)[1]
+    if name:
+        try:
+            return ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            pass
+    return datetime.now().astimezone().tzinfo
+
+
 def _window(day: date, tz: tzinfo) -> tuple[datetime, datetime]:
     start = datetime(day.year, day.month, day.day, tzinfo=tz)
     return start, start + timedelta(days=1)
@@ -419,7 +437,7 @@ def _top_level(root: Path) -> list[Path]:
 
 
 def scan(day: date, cfg: Config, tz: tzinfo | None = None) -> dict:
-    tz = tz or datetime.now().astimezone().tzinfo
+    tz = tz or local_zone()
     window = _window(day, tz)
     since = window[0].timestamp()
     journaled, skipped = read_note_ids(note_path(cfg, day))
