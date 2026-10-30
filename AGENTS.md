@@ -9,6 +9,7 @@ This repository is the `agent-journal` agent skill: a daily journal of what agen
 | Understand what the skill tells agents to do | [skills/agent-journal/SKILL.md](skills/agent-journal/SKILL.md) |
 | Change the day note or entry rules | SKILL.md step 2 |
 | Change how a day is caught up or how sessions are judged | [references/catch-up.md](skills/agent-journal/references/catch-up.md) |
+| Change how Claude Code catches up (batch classifier, Workflow) | [references/claude-code.md](skills/agent-journal/references/claude-code.md), [scripts/catch-up.workflow.js](skills/agent-journal/scripts/catch-up.workflow.js) and its mocked-agent test [tests/workflow_mock.js](tests/workflow_mock.js) |
 | Change the weekly review | [references/week.md](skills/agent-journal/references/week.md) |
 | Change the config format | [references/config.md](skills/agent-journal/references/config.md), `load_config` in the script, and the README's Configure section |
 | Change which sessions are listed, or how transcripts are read | [scripts/journal.py](skills/agent-journal/scripts/journal.py) and [tests/test_journal.py](tests/test_journal.py) |
@@ -18,7 +19,7 @@ This repository is the `agent-journal` agent skill: a daily journal of what agen
 ## Rules
 
 - **The installed copy is separate.** `skills add … --agent claude-code universal --global` copies the skill to `~/.agents/skills` and symlinks it into `~/.claude/skills`. Editing this checkout doesn't change it. Ask the user before reinstalling.
-- **Keep the skill harness-neutral.** Frontmatter uses only the open spec's fields. The body names actions, not one harness's tool names, and uses no harness variables such as `${CLAUDE_SKILL_DIR}`. `scripts/check.sh` enforces the frontmatter part.
+- **Keep the skill harness-neutral.** Frontmatter uses only the open spec's fields. The body names actions, not one harness's tool names, and uses no harness variables such as `${CLAUDE_SKILL_DIR}`. The one exception is `references/claude-code.md` and the workflow script it runs, which only Claude Code reads; keep its tool names there, and SKILL.md's pointer to them says only "Claude Code". A change to the script's agents or result fields gets a case in `tests/workflow_mock.js`. `scripts/check.sh` enforces the frontmatter part and parses the workflow script.
 - **Keep the skill and docs publishable.** No personal paths, account names, emails, organization names, or examples copied from real sessions. Personal routing belongs in the user's config file. `scripts/check.sh` scans for generic patterns, plus personal terms listed one regex per line in an untracked `.privacy-patterns.local`; never commit those terms.
 - **Respect the disclosure split.** SKILL.md holds what every run needs. A reference file holds one mode, is reached by a pointer in SKILL.md that names its condition, and links to no other reference file.
 - **The script stays standard-library Python,** run with `uv run --no-project`. A transcript format change gets a fixture test that fails without the fix.

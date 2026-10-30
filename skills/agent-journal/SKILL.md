@@ -16,6 +16,8 @@ Pick the mode from the request:
 | "catch up the journal", "journal yesterday", a date or date range | **Catch-up**: step 1, then [references/catch-up.md](references/catch-up.md) |
 | "weekly review", "journal week", "roll up the week" | **Week**: step 1, then [references/week.md](references/week.md) |
 
+**Claude Code only:** when catching up in Claude Code, including week mode's catch-up of missing days, read [references/claude-code.md](references/claude-code.md) before listing any candidates. It replaces step 1 of references/catch-up.md ("List the candidates") and routes the work through tools only Claude Code has. Other harnesses skip it.
+
 The helper script is `scripts/journal.py` in this skill's directory. Run it with `uv run --no-project <this skill's directory>/scripts/journal.py <command>`. Only on a machine without uv, fall back to `python3` (3.11 or later); the script needs only the standard library. Where uv is installed, always use it.
 
 ## 1. Load the config
@@ -59,7 +61,7 @@ tags: [agent-journal]
 Rules for entries:
 
 - **One entry per piece of work,** not per session. Sessions on the same work share an entry; every session's key still goes in `sessions`.
-- **Group under the project:** the repository name, or the area of work when there's no repository.
+- **Group under the project:** the repository the work changed, or the area of work when there's none, such as work run from a notes folder or the home directory. Reuse a project heading the note already has when the work fits it.
 - **Outcomes, not steps.** Write for the user six months from now: what changed and why it mattered, with numbers, pull requests, ticket keys and commits. Leave out the play-by-play: who reviewed what in which round, costs of individual tool runs, every commit hash.
 - **Keep it short.** One bullet per label, each at most three sentences; an entry fits in about 150 words. The linked pull request, ticket or note holds the detail; the entry says what changed and points there. When there's more to say, keep the most important and drop the rest.
 - **Each line is optional except Did.** Drop Decided, Learned and Open when there's nothing real to say. Open items each carry a disposition (do, defer, drop).

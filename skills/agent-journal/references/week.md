@@ -6,7 +6,7 @@ Roll a week of day notes into one review: what mattered, the wins, the lessons, 
 
 The week runs Monday through Sunday. Use the week the user names, or the one containing today. Run `journal.py paths --date <any day in the week>` for the week note's path and the week's dates, then `journal.py paths --date <day>` for each day's note path.
 
-For each day up to today that has no note, run `journal.py candidates --date <day>`. If it lists candidates, catch that day up first by following catch-up mode, unless the user said not to. Tell the user which days you caught up.
+For each day up to today that has no note, count its candidates with `journal.py candidates --date <day> | jq '.candidates | length'`, which keeps the digests out of your context. If it has any, catch that day up first by following catch-up mode, unless the user said not to. Tell the user which days you caught up.
 
 ## 2. Write the week note
 

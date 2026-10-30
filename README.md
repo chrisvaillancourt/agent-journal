@@ -9,7 +9,7 @@ It runs only when you ask: there are no hooks, background jobs or forks. The tra
 | Ask for | What happens |
 |---|---|
 | This session | The agent you're talking to writes the entry from its own context, which knows why things were done. |
-| Catch-up for a day or range | A helper script lists the sessions active that day, a quick check (a batch classifier tool or a small, fast model where the harness has one) drops the ones not worth an entry, and the rest become entries. |
+| Catch-up for a day or range | A helper script lists the sessions active that day, a quick check (a batch classifier tool or a small, fast model where the harness has one) drops the ones not worth an entry, and the rest become entries. In Claude Code, a range or a busy day runs as a Workflow: Haiku triages from a file, then one agent drafts each piece of work. |
 | Week | Rolls the week's day notes into highlights, wins written for a performance review, per-project summaries, lessons and open threads. Catches up missing days first. |
 
 | Harness | Invoke |
@@ -86,6 +86,8 @@ The frontmatter lists every session judged, so rerunning catch-up skips them. Se
 - `whoami` prints the current session's key. Claude Code exposes its id; in omp, pass a token you printed in an earlier command with `--nonce`.
 - `config-path` prints where the config is read from.
 
+`skills/agent-journal/scripts/catch-up.workflow.js` is a Claude Code Workflow script for catch-ups too big for the main context: it triages saved candidate files on Haiku, groups each day's sessions by piece of work, and drafts one entry per group. `references/claude-code.md` documents its arguments; other harnesses never read either file.
+
 ## Limits
 
 - Catch-up reads Claude Code and omp transcripts only. Sessions in other harnesses, Codex included, can still be journaled from inside the session.
@@ -96,7 +98,7 @@ The frontmatter lists every session judged, so rerunning catch-up skips them. Se
 ## Development
 
 ```sh
-scripts/check.sh   # frontmatter, disclosure, privacy scan, skills CLI discovery, pytest
+scripts/check.sh   # frontmatter, disclosure, privacy scan, workflow script mock, skills CLI discovery, pytest
 ```
 
 See [AGENTS.md](AGENTS.md) for the rules and [docs/decisions.md](docs/decisions.md) for why it's built this way.

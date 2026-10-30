@@ -15,6 +15,7 @@ Each entry records what was decided, why, the alternatives, and when to revisit 
 9. [Out-of-scope sessions leave no detail](#9-out-of-scope-sessions-leave-no-detail)
 10. [Note paths come from the script](#10-note-paths-come-from-the-script)
 11. [Read compacted turns back; link open items kept elsewhere](#11-read-compacted-turns-back-link-open-items-kept-elsewhere)
+12. [Claude Code catches up large ranges with a Workflow](#12-claude-code-catches-up-large-ranges-with-a-workflow)
 
 ## 1. Manual and on-demand only
 
@@ -105,3 +106,13 @@ Each entry records what was decided, why, the alternatives, and when to revisit 
 **Alternatives:** have `journal.py` emit funes seqs (it would have to assume funes numbers turns in transcript record order, which isn't documented).
 
 **Revisit when:** funes accepts timestamps for `get`, or the week note's open threads stop matching the linked record.
+
+## 12. Claude Code catches up large ranges with a Workflow
+
+**Decision:** In Claude Code, a catch-up of several days, or of a day with more than about ten candidates, runs `scripts/catch-up.workflow.js` through the Workflow tool. Haiku agents triage each day's candidates in chunks of 20, reading them from a file the main agent saved; one agent groups a day's entry sessions by piece of work and picks every project heading for the day, reusing the note's; one agent per group drafts its entry, and one per day writes the lesson lines. Drafting agents read the existing day note and say which entry they extend, and new drafts over 170 words get one trim pass (an extended entry is exempt, since a trim would cut the note's existing facts). The main agent checks the result and writes the notes. Agents name sessions by their index in the day's key list, which the main agent passes in; the script maps indexes back to keys. A skip that shipped commits or a pull request is flagged for the main agent, not promoted. Claude Code's steps live in `references/claude-code.md`, which SKILL.md points to under a "Claude Code only" condition, so other harnesses never load them. In Claude Code it replaces catch-up step 1: each day's candidates go straight to a file, so the main agent never reads the digests.
+
+**Why:** Passing digests inline makes the main agent write each one out as tool input: the 4 days of 2026-10-19 to 2026-10-22 held 78 candidates and about 285 KB of digests. Drafting agents started ad hoc inherit the session's model and effort unless someone remembers to route them, and each one's tool output comes back into the main context. The Workflow keeps the digests and transcripts in the agents, checks every return against a schema, sets each stage's model, and resumes an interrupted run from its cache. One agent per piece of work, not per transcript, matches decision 6: a group's sessions are one story, and splitting them would leave the main agent merging partial drafts. The pilot on 2026-10-19 to 2026-10-22 (59 agents, 3.6M subagent tokens, under 4 minutes) showed the rest: a Haiku triage agent miscopied one session key, auto-promotion turned a journal run into an entry, drafts ran 140 to 200 words, and drafts that never saw the day note couldn't extend its entries or reuse its project headings. A second run with drafts reading the note fixed coverage and length (92 to 156 words) but still split one day across nine headings and miscopied a title, so headings moved to the one agent that sees the whole day, and titles come from the candidates file.
+
+**Alternatives:** One subagent per transcript (partial drafts of shared work); one Workflow stage that both triages and drafts (no grouping across a day's sessions); shipping custom agent definitions with the skill (a skill can't install them, so the script takes `agent_types` instead); routing keys in the config file (the user's own instructions already say how to route subagents).
+
+**Revisit when:** Another harness gets a comparable orchestration tool, triage chunks miss sessions or disagree on grouping, or the per-agent context overhead outweighs the main-context savings on small ranges.

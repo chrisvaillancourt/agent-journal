@@ -6,8 +6,10 @@
 #   2. Progressive disclosure: SKILL.md size, links resolve, references stay one level deep.
 #   3. Portability and privacy: forward-slash paths, and a heuristic scan for personal paths,
 #      org names and email addresses (not proof that nothing private remains).
-#   4. The skills CLI parses and discovers the skill (skipped when `skills` isn't installed).
-#   5. The helper script's tests pass (pytest through uv; skipped when uv isn't installed).
+#   4. The Claude Code workflow script parses and passes its mocked-agent test
+#      (skipped when node isn't installed).
+#   5. The skills CLI parses and discovers the skill (skipped when `skills` isn't installed).
+#   6. The helper script's tests pass (pytest through uv; skipped when uv isn't installed).
 # Run after any edit to the skill, script or docs.
 set -uo pipefail
 
@@ -143,6 +145,35 @@ if [ -z "$private" ]; then
 else
   fail "private details found:"
   printf '%s\n' "$private" | sed 's/^/      /'
+fi
+
+echo "== workflow script"
+# The Workflow tool runs the script body as an async function with its hooks in scope, so it's
+# parsed the same way here: `export` dropped, top-level await and return allowed.
+workflow="$skill/scripts/catch-up.workflow.js"
+if command -v node > /dev/null 2>&1; then
+  if parse_err=$(node -e '
+    const src = require("fs").readFileSync(process.argv[1], "utf8").replace(/^export const meta/m, "const meta");
+    const AsyncFunction = (async () => {}).constructor;
+    new AsyncFunction("agent", "parallel", "pipeline", "phase", "log", "args", "budget", "workflow", src);
+  ' "$workflow" 2>&1); then
+    pass "catch-up.workflow.js parses as a Workflow script body"
+  else
+    fail "catch-up.workflow.js doesn't parse: $(printf '%s\n' "$parse_err" | grep -m 1 Error)"
+  fi
+  if mock_out=$(node "$repo/tests/workflow_mock.js" 2>&1); then
+    pass "workflow mock: $mock_out"
+  else
+    fail "workflow mock failed:"
+    printf '%s\n' "$mock_out" | tail -n 15 | sed 's/^/      /'
+  fi
+else
+  skip "node not installed; workflow script not parsed"
+fi
+if grep -Eq 'Date\.now\(|Math\.random\(|new Date\(\)' "$workflow"; then
+  fail "catch-up.workflow.js uses Date.now, Math.random or new Date(), which break Workflow resume"
+else
+  pass "catch-up.workflow.js avoids clock and randomness calls"
 fi
 
 echo "== skills CLI"
