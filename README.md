@@ -9,7 +9,7 @@ It runs only when you ask: there are no hooks, background jobs or forks. The tra
 | Ask for | What happens |
 |---|---|
 | This session | The agent you're talking to writes the entry from its own context, which knows why things were done. |
-| Catch-up for a day or range | A helper script lists the sessions active that day, a quick check (a small, fast model where the harness can run one) drops the ones not worth an entry, and the rest become entries. |
+| Catch-up for a day or range | A helper script lists the sessions active that day, a quick check (a batch classifier tool or a small, fast model where the harness has one) drops the ones not worth an entry, and the rest become entries. |
 | Week | Rolls the week's day notes into highlights, wins written for a performance review, per-project summaries, lessons and open threads. Catches up missing days first. |
 
 | Harness | Invoke |
@@ -22,7 +22,7 @@ Or ask in plain words: "journal this session", "catch up the journal for Monday"
 
 ## Install
 
-The helper script needs Python 3.11 or later and only the standard library; the skill runs it with [uv](https://docs.astral.sh/uv/) when it's installed, and `python3` otherwise. funes, a local index of past agent sessions, is optional: catch-up uses it to read sessions when it's there, and falls back to the transcripts otherwise.
+The helper script needs Python 3.11 or later and only the standard library; the skill runs it with [uv](https://docs.astral.sh/uv/), and falls back to `python3` only on a machine without uv. funes, a local index of past agent sessions, is optional: catch-up uses it to read sessions when it's there, and falls back to the transcripts otherwise.
 
 From a checkout of this repository:
 

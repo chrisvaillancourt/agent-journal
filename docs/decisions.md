@@ -46,7 +46,7 @@ Each entry records what was decided, why, the alternatives, and when to revisit 
 
 ## 4. Rules first, then a quick model judgment
 
-**Decision:** The script drops sessions by rule (subagent transcripts, headless runs, temp and excluded directories, sessions with no typed prompts, already judged). The agent then judges the rest as entry, lesson, skip or out of scope, using a small, fast model as a subagent where the harness can run one, and checks the result.
+**Decision:** The script drops sessions by rule (subagent transcripts, headless runs, temp and excluded directories, sessions with no typed prompts, already judged). The agent then judges the rest as entry, lesson, skip or out of scope, using a batch classifier tool where the harness has one, else a small, fast model as a subagent where the harness can run one, and checks the result.
 
 **Why:** Rules are free and certain for the obvious cases. Whether a session mattered isn't a rule: a one-question session can carry a lasting lesson, and a long one can be a dead end. The digest is short, so a small model can judge it cheaply. On a close call the bias is toward an entry for sessions that edited files or ran notable commands, because a missed performance-review item costs more than one extra entry. Skipped sessions are listed in the note so the user can spot a miss.
 

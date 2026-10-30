@@ -16,7 +16,7 @@ Pick the mode from the request:
 | "catch up the journal", "journal yesterday", a date or date range | **Catch-up**: step 1, then [references/catch-up.md](references/catch-up.md) |
 | "weekly review", "journal week", "roll up the week" | **Week**: step 1, then [references/week.md](references/week.md) |
 
-The helper script is `scripts/journal.py` in this skill's directory. Run it with `uv run --no-project <this skill's directory>/scripts/journal.py <command>`, or with `python3` (3.11 or later) where uv isn't installed; it needs only the standard library.
+The helper script is `scripts/journal.py` in this skill's directory. Run it with `uv run --no-project <this skill's directory>/scripts/journal.py <command>`. Only on a machine without uv, fall back to `python3` (3.11 or later); the script needs only the standard library. Where uv is installed, always use it.
 
 ## 1. Load the config
 

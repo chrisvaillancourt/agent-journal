@@ -23,7 +23,7 @@ Give each candidate one decision:
 
 When unsure between entry and skip, choose entry if the session edited files or ran notable commands, and skip otherwise.
 
-This is a quick judgment on short digests, so use a small, fast model when your harness can run one as a subagent: send the candidates in batches of about ten, with the config's `scope`, the decision rules above, and the fields `key`, `title`, `cwd`, `repo`, `prompts`, `files_edited`, `notable_commands` and `last_reply`. Ask for one line of JSON per candidate: `{"key", "decision", "project", "reason"}`, with `reason` under ten words. Without subagents, decide inline. Either way, review the result: a session that pushed commits or opened a pull request is rarely a skip.
+This is a quick judgment on short digests, and every candidate gets the same rules with its fields passed inline, so it needs no tools. If your harness has a batch classifier that labels inline items in one call (in Claude Code, for example, the fanout plugin's `classify` tool), send all the candidates in that one call with the labels entry, lesson, skip and out of scope, and the same rules and fields as below. Otherwise use a small, fast model when your harness can run one as a subagent: send the candidates in batches of about ten, with the config's `scope`, the decision rules above, and the fields `key`, `title`, `cwd`, `repo`, `prompts`, `files_edited`, `notable_commands` and `last_reply`. Ask for one line of JSON per candidate: `{"key", "decision", "project", "reason"}`, with `reason` under ten words. Without subagents, decide inline. Either way, review the result: a session that pushed commits or opened a pull request is rarely a skip.
 
 ## 3. Gather what each entry needs
 
