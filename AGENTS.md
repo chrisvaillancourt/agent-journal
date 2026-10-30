@@ -12,7 +12,7 @@ This repository is the `agent-journal` agent skill: a daily journal of what agen
 | Change how Claude Code catches up (batch classifier, Workflow) | [references/claude-code.md](skills/agent-journal/references/claude-code.md), [scripts/catch-up.workflow.js](skills/agent-journal/scripts/catch-up.workflow.js) and its mocked-agent test [tests/workflow_mock.js](tests/workflow_mock.js) |
 | Change the weekly review | [references/week.md](skills/agent-journal/references/week.md) |
 | Change the config format | [references/config.md](skills/agent-journal/references/config.md), `load_config` in the script, and the README's Configure section |
-| Change which sessions are listed, or how transcripts are read | [scripts/journal.py](skills/agent-journal/scripts/journal.py) and [tests/test_journal.py](tests/test_journal.py) |
+| Change which sessions are listed, how transcripts are read, or how workflow results are prepared and merged into notes (`prepare`, `merge`) | [scripts/journal.py](skills/agent-journal/scripts/journal.py) and [tests/test_journal.py](tests/test_journal.py) |
 | Know why something is the way it is, before changing it | [docs/decisions.md](docs/decisions.md) |
 | Install and use | [README.md](README.md) |
 

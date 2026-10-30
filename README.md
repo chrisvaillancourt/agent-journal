@@ -85,6 +85,8 @@ The frontmatter lists every session judged, so rerunning catch-up skips them. Se
 - `paths --date YYYY-MM-DD` prints the day note and week note paths from the configured patterns.
 - `whoami` prints the current session's key. Claude Code exposes its id; in omp, pass a token you printed in an earlier command with `--nonce`.
 - `config-path` prints where the config is read from.
+- `prepare --from D [--to D] --out DIR` saves each day's candidates to DIR, copies the Claude Code workflow script there, and writes its args to `DIR/args.json`.
+- `merge RESULT [--heading OLD=NEW] [--write]` writes a workflow result into the day notes after checking every key against the saved candidates; without `--write` it only reports.
 
 `skills/agent-journal/scripts/catch-up.workflow.js` is a Claude Code Workflow script for catch-ups too big for the main context: it triages saved candidate files on Haiku, groups each day's sessions by piece of work, and drafts one entry per group. `references/claude-code.md` documents its arguments; other harnesses never read either file.
 

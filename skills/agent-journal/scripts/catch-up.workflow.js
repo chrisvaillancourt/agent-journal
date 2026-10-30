@@ -299,6 +299,7 @@ async function draftDay(g) {
   return {
     date: g.day.date,
     note: g.day.note,
+    candidates_file: g.day.candidates_file,
     candidates: g.day.keys.length,
     unjudged: g.unjudged,
     decisions: g.decisions.map(({ key, decision, reason, shipped }) =>
@@ -313,7 +314,7 @@ const days = A.days.filter(d => d.keys.length > 0)
 const results = await pipeline(days, triageDay, groupDay, draftDay)
 return {
   days: results.map((r, i) => r || {
-    date: days[i].date, note: days[i].note, candidates: days[i].keys.length,
+    date: days[i].date, note: days[i].note, candidates_file: days[i].candidates_file, candidates: days[i].keys.length,
     unjudged: days[i].keys, decisions: [], entries: [], lessons: [],
     problems: ['this day failed; catch it up again'],
   }),

@@ -18,6 +18,13 @@ active, not only the day it started. Standard library only.
       you printed in an earlier command so the script can find it in the transcript.
   journal.py config-path
       Print where the config file is read from.
+  journal.py prepare --from YYYY-MM-DD [--to YYYY-MM-DD] --out DIR [--tz NAME] [--config PATH]
+      For a Claude Code Workflow catch-up: save each day's candidates to DIR, copy the workflow
+      script there, write the Workflow args to DIR/args.json, and print a summary.
+  journal.py merge RESULT [--heading OLD=NEW ...] [--write] [--config PATH]
+      Write a Workflow catch-up result (or the tool's output file holding it) into the day notes.
+      Without --write, report what would change. Each day's keys are checked against its saved
+      candidates first; unfinished sessions stay out of the note so the next catch-up lists them.
 """
 
 from __future__ import annotations
@@ -26,6 +33,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -86,6 +94,7 @@ class Config:
     day_note: str = DEFAULT_DAY_NOTE
     week_note: str = DEFAULT_WEEK_NOTE
     notable_commands: list[str] = field(default_factory=list)
+    scope: str = ""
 
     def notable(self) -> re.Pattern:
         return re.compile("|".join(f"(?:{p})" for p in NOTABLE_COMMANDS + self.notable_commands))
@@ -116,6 +125,7 @@ def load_config(path: Path) -> Config:
         day_note=data.get("day_note", DEFAULT_DAY_NOTE),
         week_note=data.get("week_note", DEFAULT_WEEK_NOTE),
         notable_commands=list(data.get("notable_commands", [])),
+        scope=str(data.get("scope", "")),
     )
     for name in ("day_note", "week_note"):
         template = getattr(cfg, name)
@@ -160,28 +170,11 @@ def paths(cfg: Config, day: date) -> dict:
 
 def read_note_ids(path: Path) -> tuple[set[str], set[str]]:
     """The `sessions` and `skipped` lists from a day note's frontmatter."""
-    lists: dict[str, set[str]] = {"sessions": set(), "skipped": set()}
     if not path.is_file():
-        return lists["sessions"], lists["skipped"]
-    lines = path.read_text().splitlines()
-    if not lines or lines[0].strip() != "---":
-        return lists["sessions"], lists["skipped"]
-    current = None
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        key = re.match(r"^([A-Za-z_-]+):\s*(.*)$", line)
-        if key:
-            current = key.group(1) if key.group(1) in lists else None
-            inline = key.group(2).strip()
-            if current and inline.startswith("["):
-                items = inline.strip("[]").split(",")
-                lists[current].update(i.strip().strip("'\"") for i in items if i.strip())
-            continue
-        item = re.match(r"^\s*-\s*(.+?)\s*(#.*)?$", line)
-        if current and item:
-            lists[current].add(item.group(1).strip("'\""))
-    return lists["sessions"], lists["skipped"]
+        return set(), set()
+    front, _ = _split_note(path.read_text())
+    _, lists, _ = _pull_lists(front)
+    return set(lists["sessions"]), set(lists["skipped"])
 
 
 def _parse_ts(value) -> datetime | None:
@@ -523,6 +516,222 @@ def whoami(cfg: Config, env=None, nonce: str | None = None, wait_seconds: float 
         time.sleep(0.5)
 
 
+WORKFLOW_SCRIPT = Path(__file__).resolve().parent / "catch-up.workflow.js"
+SKILL_DIR = Path(__file__).resolve().parents[1]
+NEW_NOTE = "---\ndate: {date}\ntags: [agent-journal]\n---\n\n# Journal: {date}\n"
+
+
+def prepare(cfg: Config, days: list[date], out_dir: Path, tz: tzinfo | None = None) -> dict:
+    """Save each day's candidates and build the Workflow tool's args, so the digests stay in files."""
+    out_dir = Path(out_dir).resolve()  # the agents and merge read these paths from other directories
+    out_dir.mkdir(parents=True, exist_ok=True)
+    counts, arg_days = {}, []
+    for day in days:
+        result = scan(day, cfg, tz)
+        saved = out_dir / f"candidates-{day.isoformat()}.json"
+        saved.write_text(json.dumps(result, indent=2))
+        keys = [c["key"] for c in result["candidates"]]
+        counts[day.isoformat()] = len(keys)
+        if keys:
+            arg_days.append({"date": day.isoformat(), "candidates_file": str(saved), "note": result["note"], "keys": keys})
+    # The Workflow tool loads a script only from a directory the session can read, such as its scratch directory.
+    script = out_dir / WORKFLOW_SCRIPT.name
+    shutil.copyfile(WORKFLOW_SCRIPT, script)
+    args_file = out_dir / "args.json"
+    args_file.write_text(json.dumps({"skill_dir": str(SKILL_DIR), "scope": cfg.scope.strip(), "days": arg_days}))
+    return {"script_path": str(script), "args_file": str(args_file), "total": sum(counts.values()), "counts": counts}
+
+
+def _split_note(text: str) -> tuple[list[str], str]:
+    lines = text.split("\n")
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                return lines[1:i], "\n".join(lines[i + 1:])
+    return [], text
+
+
+def _pull_lists(front: list[str]) -> tuple[list[str], dict[str, list[str]], int]:
+    """Frontmatter without its sessions/skipped lists, the lists, and where to put them back."""
+    kept, lists, at, current = [], {"sessions": [], "skipped": []}, None, None
+    for line in front:
+        if line[:1] not in ("", " ", "\t", "-"):  # any top-level line ends the list before it
+            key = re.match(r"^([^:]+):\s*(.*)$", line)
+            current = key.group(1).strip() if key and key.group(1).strip() in lists else None
+            if current:
+                at = len(kept) if at is None else at
+                inline = key.group(2).strip()
+                if inline.startswith("["):
+                    lists[current] += [i.strip().strip("'\"") for i in inline.strip("[]").split(",") if i.strip()]
+                continue
+            kept.append(line)
+            continue
+        item = re.match(r"^\s*-\s*(.+?)\s*(#.*)?$", line)
+        if current and item:
+            lists[current].append(item.group(1).strip("'\""))
+            continue
+        kept.append(line)
+    if at is None:
+        at = next((i + 1 for i, line in enumerate(kept) if line.startswith("date:")), 0)
+    return kept, lists, at
+
+
+FENCE = re.compile(r"^\s*(```|~~~)")
+
+
+def _headings(text: str, prefix: str) -> list[tuple[int, str]]:
+    """Offset and line of each heading starting with prefix, skipping fenced code blocks."""
+    found, pos, fence = [], 0, None
+    for line in text.split("\n"):
+        m = FENCE.match(line)
+        if m:
+            fence = m.group(1) if fence is None else (None if m.group(1) == fence else fence)
+        elif fence is None and line.startswith(prefix):
+            found.append((pos, line))
+        pos += len(line) + 1
+    return found
+
+
+def _sections(body: str) -> tuple[str, list[list[str]]]:
+    starts = [p for p, _ in _headings(body, "## ")]
+    if not starts:
+        return body, []
+    secs = []
+    for i, p in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else len(body)
+        head, _, text = body[p:end].partition("\n")
+        secs.append([head[3:].strip(), text])
+    return body[:starts[0]], secs
+
+
+def _place(secs: list[list[str]], heading: str, markdown: str, extends: str) -> str:
+    """Put one entry in the note's sections: replace the entry it extends, or add it under its heading."""
+    markdown = markdown.strip() + "\n"
+    if extends:
+        target = extends.strip()
+        matches = {id(s): [p for p, line in _headings(s[1], "### ") if line.rstrip() == target] for s in secs}
+        # The entry's own section first; elsewhere only when exactly one entry carries that heading.
+        own = [s for s in secs if s[0] == heading and matches[id(s)]]
+        pool = own or [s for s in secs if matches[id(s)]]
+        if sum(len(matches[id(s)]) for s in pool) == 1:
+            sec = pool[0]
+            start = matches[id(sec)][0]
+            later = [p for p, _ in _headings(sec[1], "### ") if p > start]
+            end = later[0] if later else len(sec[1])
+            sec[1] = sec[1][:start] + markdown + "\n" + sec[1][end:].lstrip("\n")
+            return "extended"
+    for sec in secs:
+        if sec[0] == heading:
+            sec[1] = sec[1].rstrip("\n") + "\n\n" + markdown
+            return "added"
+    at = next((i for i, sec in enumerate(secs) if sec[0] == "Skipped"), len(secs))
+    secs.insert(at, [heading, "\n" + markdown])
+    return "new heading"
+
+
+def _merge_day(day: dict, headings: dict[str, str], write: bool) -> dict:
+    report = {"date": day["date"], "note": day["note"], "added": 0, "extended": 0, "new_headings": [],
+              "sessions_added": 0, "skipped_added": 0, "rerun": [], "warnings": []}
+    cands = json.loads(Path(day["candidates_file"]).read_text())["candidates"]
+    info = {c["key"]: c for c in cands}
+    decisions = {d["key"]: d for d in day.get("decisions", [])}
+    judged = set(decisions) | set(day.get("unjudged", []))
+    if judged != set(info):
+        missing, unknown = sorted(set(info) - judged), sorted(judged - set(info))
+        report["error"] = (f"keys don't match {day['candidates_file']}: missing {missing}, unknown {unknown}; "
+                           "a key was likely miscopied into the Workflow args. Nothing written for this day.")
+        return report
+
+    note = Path(day["note"])
+    text = note.read_text() if note.is_file() else NEW_NOTE.format(date=day["date"])
+    front, body = _split_note(text)
+    kept, lists, at = _pull_lists(front)
+    pre, secs = _sections(body)
+    problems = " ".join(day.get("problems", []))
+    rerun = set(day.get("unjudged", []))
+    skip_lines, out_of_scope = [], 0
+
+    def add(keys, project, markdown, extends=""):
+        present = [k for k in keys if k in lists["sessions"]]
+        if len(present) == len(keys):
+            report["warnings"].append(f"already in the note, not added again: {', '.join(keys)}")
+            return
+        if present and not extends:
+            report["warnings"].append(f"{', '.join(present)} already in the note; check it doesn't now hold this work twice")
+        if not markdown.lstrip().startswith("### "):
+            report["warnings"].append(f"entry for {', '.join(keys)} doesn't start with a '### ' heading")
+        heading = headings.get(project, project)
+        how = _place(secs, heading, markdown, extends)
+        if how == "new heading":
+            report["new_headings"].append(heading)
+        report["extended" if how == "extended" else "added"] += 1
+        if extends and how != "extended":
+            report["warnings"].append(f"no single entry headed {extends!r} to extend; added it as a new entry")
+        for k in keys:
+            if k not in lists["sessions"]:
+                lists["sessions"].append(k)
+                report["sessions_added"] += 1
+
+    drafted = set()
+    for e in day.get("entries", []):
+        add(e["keys"], e["project"], e["markdown"], e.get("extends", ""))
+        drafted.update(e["keys"])
+    lessons = {l["key"]: l for l in day.get("lessons", [])}
+    for key, d in decisions.items():
+        title = f'"{info[key].get("title") or "untitled"}" ({info[key].get("harness", "?")})'
+        if d["decision"] == "entry" and key not in drafted:
+            rerun.add(key)
+        elif d["decision"] == "lesson":
+            lesson = lessons.get(key)
+            if lesson and lesson["markdown"].strip():
+                add([key], lesson["project"], lesson["markdown"])
+            elif lesson is None or key in problems:
+                rerun.add(key)
+            elif key not in lists["skipped"]:
+                skip_lines.append(f"- {title}: no lasting lesson")
+                lists["skipped"].append(key)
+        elif d["decision"] in ("skip", "out of scope") and key not in lists["skipped"]:
+            lists["skipped"].append(key)
+            if d["decision"] == "skip":
+                skip_lines.append(f"- {title}: {d['reason'].rstrip('.')}")
+            else:
+                out_of_scope += 1
+    report["skipped_added"] = len(skip_lines) + out_of_scope
+    if skip_lines or out_of_scope:
+        sec = next((s for s in secs if s[0] == "Skipped"), None)
+        if sec is None:
+            sec = ["Skipped", "\n"]
+            secs.append(sec)
+        if out_of_scope:  # one running count, so out-of-scope sessions never leave detail
+            counted = re.compile(r"(?m)^- (\d+) out-of-scope sessions?\n?")
+            earlier = counted.search(sec[1])
+            if earlier:
+                out_of_scope += int(earlier.group(1))
+                sec[1] = counted.sub("", sec[1], count=1)
+            skip_lines.append(f"- {out_of_scope} out-of-scope session{'s' if out_of_scope > 1 else ''}")
+        sec[1] = sec[1].rstrip("\n") + "\n" + "\n".join(skip_lines) + "\n"
+    report["rerun"] = sorted(rerun)
+
+    listed = [f"{name}:\n" + "".join(f"  - {k}\n" for k in keys) for name, keys in lists.items() if keys]
+    front_text = "\n".join(kept[:at]) + ("\n" if at else "") + "".join(listed) + "\n".join(kept[at:])
+    if secs and pre.strip():
+        pre = pre.rstrip("\n") + "\n\n"
+    body_text = pre + "".join(f"## {h}\n{t.rstrip(chr(10))}\n\n" for h, t in secs)
+    if write:
+        note.parent.mkdir(parents=True, exist_ok=True)
+        note.write_text(f"---\n{front_text.rstrip(chr(10))}\n---\n{body_text.rstrip()}\n")
+    return report
+
+
+def merge(result: dict, headings: dict[str, str] | None = None, write: bool = False) -> dict:
+    """Write a Workflow catch-up result into its day notes; without write, only report."""
+    if "days" not in result and "result" in result:  # the Workflow tool's output file wraps the return value
+        result = result["result"]
+        result = json.loads(result) if isinstance(result, str) else result
+    days = [_merge_day(day, headings or {}, write) for day in result["days"]]
+    return {"wrote": write, "days": days}
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -537,6 +746,18 @@ def main(argv=None) -> int:
     who.add_argument("--nonce", help="a fresh token printed earlier in this session")
     who.add_argument("--config", type=Path)
     sub.add_parser("config-path", help="print the config file location")
+    prep = sub.add_parser("prepare", help="save candidates and Workflow args for a Claude Code catch-up")
+    prep.add_argument("--from", dest="start", required=True, help="first day, YYYY-MM-DD")
+    prep.add_argument("--to", dest="end", help="last day, YYYY-MM-DD; default the first")
+    prep.add_argument("--out", type=Path, required=True, help="directory for the files, such as your scratch directory")
+    prep.add_argument("--tz", help="IANA zone for day boundaries, default local")
+    prep.add_argument("--config", type=Path)
+    mrg = sub.add_parser("merge", help="write a Workflow catch-up result into the day notes")
+    mrg.add_argument("result", type=Path, help="the result JSON, or the Workflow tool's output file")
+    mrg.add_argument("--heading", action="append", default=[], metavar="OLD=NEW",
+                     help="put entries whose project is OLD under the NEW heading; repeatable")
+    mrg.add_argument("--write", action="store_true", help="write the notes; without it, only report")
+    mrg.add_argument("--config", type=Path)
     args = parser.parse_args(argv)
 
     if args.command == "config-path":
@@ -556,6 +777,22 @@ def main(argv=None) -> int:
         day = date.fromisoformat(args.date) if args.date else date.today()
         print(json.dumps(paths(cfg, day), indent=2))
         return 0
+    if args.command == "prepare":
+        start = date.fromisoformat(args.start)
+        end = date.fromisoformat(args.end) if args.end else start
+        days = [start + timedelta(days=i) for i in range((end - start).days + 1)]
+        tz = ZoneInfo(args.tz) if args.tz else None
+        print(json.dumps(prepare(cfg, days, args.out, tz), indent=2))
+        return 0
+    if args.command == "merge":
+        bad = [h for h in args.heading if "=" not in h]
+        if bad:
+            print(f"agent-journal: --heading takes OLD=NEW, got {bad}", file=sys.stderr)
+            return 2
+        headings = dict(h.split("=", 1) for h in args.heading)
+        report = merge(json.loads(args.result.read_text()), headings, args.write)
+        print(json.dumps(report, indent=2))
+        return 1 if any("error" in d for d in report["days"]) else 0
     found = whoami(cfg, nonce=args.nonce)
     if not found:
         print("agent-journal: session not found; print a fresh token in one command, then pass it "

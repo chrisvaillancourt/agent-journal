@@ -75,6 +75,7 @@ run(agent, parallel, pipeline, () => {}, () => {}, { skill_dir: '/skill', scope:
 
   // Every key ends up judged, unjudged, or in a recorded problem; none silently vanishes.
   for (const d of result.days) {
+    assert.strictEqual(d.candidates_file, days.find(x => x.date === d.date).candidates_file, 'journal.py merge needs it')
     const accounted = new Set([...d.decisions.map(x => x.key), ...d.unjudged])
     assert.deepStrictEqual([...accounted].sort(), [...scenarios[d.date].keys].sort(), `${d.date} coverage`)
   }

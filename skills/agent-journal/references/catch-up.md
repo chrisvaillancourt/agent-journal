@@ -19,7 +19,7 @@ Give each candidate one decision:
 - **entry**: it changed something lasting (code, docs, tickets, pull requests, messages sent, a decision made) or produced a finding worth recalling.
 - **lesson**: little work, but a lasting lesson (how a tool really behaves, a gotcha, a technique). It gets a one-line entry.
 - **skip**: a quick lookup or status check, navigation ("find the worktree for…"), an accidental or abandoned session, a run of this journal skill (the day note it wrote is its record), or a helper session doing part of another candidate's work (its prompt is a delegated brief, such as one that opens with `<file name=` or "Complete assignment"; the parent's entry covers it).
-- **out of scope**: outside the config's `scope`.
+- **out of scope**: outside the config's `scope`. Judge by what the session served, not by its subject: a session is in scope when it served in-scope work, whatever it was about.
 
 When unsure between entry and skip, choose entry if the session edited files or ran notable commands, and skip otherwise.
 

@@ -405,3 +405,216 @@ def test_the_systems_temp_directory_is_always_excluded(roots, monkeypatch):
     monkeypatch.setattr(journal.tempfile, "gettempdir", lambda: "/scratch/tmp")
     write_jsonl(claude / "-scratch/s.jsonl", [claude_user("2026-10-15T10:00:00Z", "hi", cwd="/scratch/tmp/run1")])
     assert filtered(journal.scan(DAY, config(roots), tz=UTC))["claude:s"] == "excluded directory"
+
+
+# prepare and merge: the Workflow route's tools.
+
+WORKFLOW = SCRIPT.parent / "catch-up.workflow.js"
+
+
+def test_load_config_reads_scope(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('journal_dir = "/j"\nscope = """\nWork only.\n"""\n')
+    assert journal.load_config(path).scope.strip() == "Work only."
+
+
+def test_prepare_saves_each_day_and_builds_the_workflow_args(roots, tmp_path):
+    _, claude, _, notes = roots
+    write_jsonl(claude / "-work-repo/a.jsonl", [claude_user("2026-10-15T10:00:00Z", "first")])
+    write_jsonl(claude / "-work-repo/b.jsonl", [claude_user("2026-10-15T11:00:00Z", "second")])
+    out = tmp_path / "run"
+    cfg = config(roots, scope="Work only.")
+    summary = journal.prepare(cfg, [DAY, date(2026, 10, 16)], out, tz=UTC)
+
+    assert summary["total"] == 2
+    assert summary["counts"] == {"2026-10-15": 2, "2026-10-16": 0}
+    assert Path(summary["script_path"]).read_text() == WORKFLOW.read_text()
+    args = json.loads(Path(summary["args_file"]).read_text())
+    assert args["skill_dir"] == str(SCRIPT.parents[1])
+    assert args["scope"] == "Work only."
+    assert [d["date"] for d in args["days"]] == ["2026-10-15"]  # a day with nothing to judge is left out
+    day = args["days"][0]
+    assert day["note"] == str(notes / "2026-10-15-journal.md")
+    saved = json.loads(Path(day["candidates_file"]).read_text())
+    assert day["keys"] == [c["key"] for c in saved["candidates"]] == ["claude:a", "claude:b"]
+    assert (out / "candidates-2026-10-16.json").is_file()
+
+
+def candidates_file(tmp_path, day, items):
+    path = tmp_path / f"candidates-{day}.json"
+    path.write_text(json.dumps({"date": day, "candidates": [
+        {"key": k, "harness": k.split(":")[0], "title": t} for k, t in items]}))
+    return path
+
+
+def result_day(note, cands, **fields):
+    keys = [c["key"] for c in json.loads(cands.read_text())["candidates"]]
+    day = {"date": "2026-10-15", "note": str(note), "candidates_file": str(cands), "candidates": len(keys),
+           "unjudged": [], "decisions": [], "entries": [], "lessons": [], "problems": []}
+    day.update(fields)
+    return day
+
+
+def test_merge_writes_a_new_note_with_entries_lessons_and_skips(roots, tmp_path):
+    _, _, _, notes = roots
+    note = notes / "2026-10-15-journal.md"
+    cands = candidates_file(tmp_path, "2026-10-15", [
+        ("claude:e1", "Build"), ("claude:e2", "Build, resumed"), ("omp:l1", "Gotcha"),
+        ("claude:s1", "Lookup"), ("claude:o1", "Hobby")])
+    day = result_day(note, cands, decisions=[
+        {"key": "claude:e1", "decision": "entry", "reason": "r"},
+        {"key": "claude:e2", "decision": "entry", "reason": "r"},
+        {"key": "omp:l1", "decision": "lesson", "reason": "r"},
+        {"key": "claude:s1", "decision": "skip", "reason": "Quick lookup."},
+        {"key": "claude:o1", "decision": "out of scope", "reason": "personal"}],
+        entries=[{"project": "repo", "markdown": "### Built it #win\n\n- **Did:** x", "keys": ["claude:e1", "claude:e2"],
+                  "extends": "", "win": True}],
+        lessons=[{"key": "omp:l1", "project": "Tools", "markdown": "### A gotcha\n- **Learned:** y"}])
+    report = journal.merge({"days": [day]}, write=True)
+
+    text = note.read_text()
+    sessions, skipped = journal.read_note_ids(note)
+    assert sessions == {"claude:e1", "claude:e2", "omp:l1"}
+    assert skipped == {"claude:s1", "claude:o1"}
+    assert "# Journal: 2026-10-15" in text
+    assert text.index("## repo") < text.index("### Built it #win") < text.index("## Tools") < text.index("## Skipped")
+    assert '- "Lookup" (claude): Quick lookup' in text
+    assert "1 out-of-scope session" in text and "Hobby" not in text
+    assert report["days"][0]["rerun"] == []
+
+
+def test_merge_extends_an_entry_reuses_headings_and_keeps_the_rest(roots, tmp_path):
+    _, _, _, notes = roots
+    note = notes / "2026-10-15-journal.md"
+    note.write_text(
+        "---\ndate: 2026-10-15\nsessions:\n  - claude:old\ntags:\n  - custom\n---\n\n# Journal: 2026-10-15\n\n"
+        "## Agent tooling\n\n### First thing\n\n- **Did:** keep me\n\n### Second thing\n\n- **Did:** old text\n")
+    cands = candidates_file(tmp_path, "2026-10-15", [("claude:n1", "More"), ("claude:n2", "New")])
+    day = result_day(note, cands, decisions=[
+        {"key": "claude:n1", "decision": "entry", "reason": "r"},
+        {"key": "claude:n2", "decision": "entry", "reason": "r"}],
+        entries=[
+            {"project": "Agent tooling", "markdown": "### Second thing\n\n- **Did:** old text, plus more",
+             "keys": ["claude:n1"], "extends": "### Second thing", "win": False},
+            {"project": "agent-tooling", "markdown": "### Third thing\n\n- **Did:** z",
+             "keys": ["claude:n2"], "extends": "", "win": False}])
+    journal.merge({"days": [day]}, headings={"agent-tooling": "Agent tooling"}, write=True)
+
+    text = note.read_text()
+    assert journal.read_note_ids(note)[0] == {"claude:old", "claude:n1", "claude:n2"}
+    assert "tags:\n  - custom" in text
+    assert text.count("## Agent tooling") == 1
+    assert "keep me" in text and "old text, plus more" in text and "- **Did:** old text\n" not in text
+    assert text.index("### First thing") < text.index("### Second thing") < text.index("### Third thing")
+
+
+def test_merge_leaves_unfinished_work_for_the_next_catch_up(roots, tmp_path):
+    _, _, _, notes = roots
+    note = notes / "2026-10-15-journal.md"
+    cands = candidates_file(tmp_path, "2026-10-15", [
+        ("claude:u", "Unjudged"), ("claude:d", "Draft failed"), ("claude:lm", "Lesson missing"),
+        ("claude:lf", "Lesson failed"), ("claude:ln", "No lesson")])
+    day = result_day(note, cands, unjudged=["claude:u"], decisions=[
+        {"key": "claude:d", "decision": "entry", "reason": "r"},
+        {"key": "claude:lm", "decision": "lesson", "reason": "r"},
+        {"key": "claude:lf", "decision": "lesson", "reason": "r"},
+        {"key": "claude:ln", "decision": "lesson", "reason": "r"}],
+        lessons=[{"key": "claude:lf", "project": "P", "markdown": ""},
+                 {"key": "claude:ln", "project": "P", "markdown": ""}],
+        problems=["draft 2026-10-15 failed for claude:d", "lessons 2026-10-15 returned nothing for claude:lf"])
+    report = journal.merge({"days": [day]}, write=True)
+
+    sessions, skipped = journal.read_note_ids(note)
+    assert sessions == set()
+    assert skipped == {"claude:ln"}
+    assert sorted(report["days"][0]["rerun"]) == ["claude:d", "claude:lf", "claude:lm", "claude:u"]
+
+
+def test_merge_refuses_a_day_whose_keys_dont_match_its_candidates(roots, tmp_path):
+    _, _, _, notes = roots
+    note = notes / "2026-10-15-journal.md"
+    cands = candidates_file(tmp_path, "2026-10-15", [("claude:real", "Real")])
+    day = result_day(note, cands, decisions=[{"key": "claude:typo", "decision": "skip", "reason": "r"}])
+    report = journal.merge({"days": [day]}, write=True)
+    assert not note.exists()
+    assert "claude:real" in report["days"][0]["error"]
+
+
+def test_merge_without_write_changes_nothing(roots, tmp_path):
+    _, _, _, notes = roots
+    note = notes / "2026-10-15-journal.md"
+    cands = candidates_file(tmp_path, "2026-10-15", [("claude:s", "Lookup")])
+    day = result_day(note, cands, decisions=[{"key": "claude:s", "decision": "skip", "reason": "r"}])
+    report = journal.merge({"days": [day]})
+    assert not note.exists()
+    assert report["days"][0]["skipped_added"] == 1 and report["wrote"] is False
+
+
+def test_cli_merge_reads_a_workflow_output_file(roots, tmp_path):
+    _, claude, omp, notes = roots
+    note = notes / "2026-10-15-journal.md"
+    cands = candidates_file(tmp_path, "2026-10-15", [("claude:s", "Lookup")])
+    day = result_day(note, cands, decisions=[{"key": "claude:s", "decision": "skip", "reason": "r"}])
+    output = tmp_path / "task.output"
+    output.write_text(json.dumps({"summary": "s", "result": {"days": [day]}}))  # the Workflow tool's wrapper
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(f'journal_dir = "{notes}"\nclaude_projects = "{claude}"\nomp_sessions = "{omp}"\n')
+    out = subprocess.run(
+        [sys.executable, str(SCRIPT), "merge", str(output), "--write", "--config", str(cfg)],
+        capture_output=True, text=True, check=True,
+    )
+    assert json.loads(out.stdout)["wrote"] is True
+    assert journal.read_note_ids(note)[1] == {"claude:s"}
+
+
+def merge_one(tmp_path, note, cands_items, decisions, **fields):
+    cands = candidates_file(tmp_path, "2026-10-15", cands_items)
+    return journal.merge({"days": [result_day(note, cands, decisions=decisions, **fields)]}, write=True)
+
+
+def test_merge_extends_the_entry_under_its_own_project(roots, tmp_path):
+    _, _, _, notes = roots
+    note = notes / "2026-10-15-journal.md"
+    note.write_text("---\ndate: 2026-10-15\n---\n\n# J\n\n## alpha\n\n### Review fixes\n\n- alpha fact\n\n"
+                    "## beta\n\n### Review fixes\n\n- beta fact\n")
+    merge_one(tmp_path, note, [("claude:b", "B")], [{"key": "claude:b", "decision": "entry", "reason": "r"}],
+              entries=[{"project": "beta", "markdown": "### Review fixes\n\n- beta fact, more", "keys": ["claude:b"],
+                        "extends": "### Review fixes", "win": False}])
+    text = note.read_text()
+    assert "alpha fact" in text and "beta fact, more" in text and "- beta fact\n" not in text
+    assert text.index("## alpha") < text.index("alpha fact") < text.index("## beta") < text.index("beta fact, more")
+
+
+def test_merge_keeps_lists_under_frontmatter_keys_it_does_not_own(roots, tmp_path):
+    _, _, _, notes = roots
+    note = notes / "2026-10-15-journal.md"
+    note.write_text("---\ndate: 2026-10-15\nsessions:\n  - claude:a\nrelated notes:\n  - x\ntags: [t]\n---\n\n# J\n")
+    merge_one(tmp_path, note, [("claude:s", "S")], [{"key": "claude:s", "decision": "skip", "reason": "r"}])
+    text = note.read_text()
+    assert journal.read_note_ids(note) == ({"claude:a"}, {"claude:s"})
+    assert "related notes:\n  - x\n" in text
+
+
+def test_merge_starts_a_new_heading_on_its_own_line(roots, tmp_path):
+    _, _, _, notes = roots
+    note = notes / "2026-10-15-journal.md"
+    note.write_text("---\ndate: 2026-10-15\n---\n\n# J\n\nIntro paragraph")
+    merge_one(tmp_path, note, [("claude:e", "E")], [{"key": "claude:e", "decision": "entry", "reason": "r"}],
+              entries=[{"project": "repo", "markdown": "### Did it\n\n- **Did:** x", "keys": ["claude:e"],
+                        "extends": "", "win": False}])
+    assert "Intro paragraph\n\n## repo\n" in note.read_text()
+
+
+def test_merge_ignores_headings_inside_fenced_code(roots, tmp_path):
+    _, _, _, notes = roots
+    note = notes / "2026-10-15-journal.md"
+    fenced = "```md\n## Skipped\n### not heading\n```"
+    note.write_text(f"---\ndate: 2026-10-15\n---\n\n# J\n\n## repo\n\n### A\n\n- old\n\n{fenced}\n\n### Kept\n\n- kept\n")
+    merge_one(tmp_path, note, [("claude:a", "A"), ("claude:s", "S")], [
+        {"key": "claude:a", "decision": "entry", "reason": "r"},
+        {"key": "claude:s", "decision": "skip", "reason": "lookup"}],
+        entries=[{"project": "repo", "markdown": "### A\n\n- new", "keys": ["claude:a"], "extends": "### A", "win": False}])
+    text = note.read_text()
+    assert fenced not in text  # the fence was part of entry A, which was replaced whole
+    assert "### Kept\n\n- kept" in text
+    assert text.index("### Kept") < text.index("## Skipped") < text.index('"S" (claude): lookup')

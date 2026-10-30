@@ -37,6 +37,6 @@ Not personal projects, hobbies or household questions.
 ```
 
 - `~` and environment variables expand in every path.
-- Only `journal_dir` is required. The script reads everything except `scope`, which is for you.
+- Only `journal_dir` is required. The script reads every field; `scope` it only passes to the Claude Code workflow, which judges sessions against it.
 - Keep personal routing (paths, employer names, tool names) in this file, never in the skill.
 - After changing it, run `journal.py paths` and `journal.py candidates` once: they report a bad template field or pattern.
